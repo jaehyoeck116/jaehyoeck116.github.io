@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>강 시뮬레이션 (3D) - 햄스터 월드</title>
+    <!-- Three.js 라이브러리 로드 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Three.js OrbitControls (카메라 제어용) 로드 -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        body {
+            display: flex;
+            flex-wrap: wrap;
+            font-family: 'Inter', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+        }
+
+        #sidebar {
+            width: 250px;
+            margin-right: 30px;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            flex-shrink: 0;
+            margin-bottom: 20px;
+        }
+
+        #three-container {
+            width: 800px;
+            height: 600px;
+            border: 1px solid #ccc;
+            background-color: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            overflow: hidden;
+            cursor: grab;
+            margin-bottom: 20px;
+        }
+        #three-container:active {
+            cursor: grabbing;
+        }
+        #three-container canvas {
+            display: block;
+        }
+
+        .main-content-area {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            flex-wrap: nowrap;
+            width: 100%;
+            max-width: 1100px;
+        }
+         /* 햄스터 상태 표시 UI */
+        #hamsterStatsUI {
+            width: calc(100% - 40px); /* body padding 고려 */
+            max-width: 1060px; /* main-content-area max-width - body padding */
+            margin: 0 auto 10px auto; /* 위쪽 중앙, 캔버스 위 간격 */
+            padding: 8px;
+            background-color: rgba(255, 255, 255, 0.85); /* 배경 약간 더 불투명하게 */
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            font-size: 0.85em; /* 폰트 크기 미세 조정 */
+            text-align: center;
+            min-height: 20px; /* 내용 없을 때도 높이 유지 */
+            line-height: 1.4;
+        }
+
+
+        .canvas-buttons-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            margin-top: 0px;
+        }
+
+        .section-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #333;
+            text-align: center;
+        }
+
+        .brush-type-option, .brush-shape-option, .terrain-option {
+            width: 40px;
+            height: 40px;
+            border: 2px solid #ddd;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            margin: 5px;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.2s ease-in-out;
+            font-size: 1.5em;
+            user-select: none;
+        }
+        #hamsterBrushType {
+            font-size: 1.8em;
+            line-height: 1;
+             padding: 0;
+        }
+
+
+        .brush-type-option.selected, .brush-shape-option.selected, .terrain-option.selected {
+            border: 2px solid #007bff;
+            box-shadow: 0 0 8px rgba(0, 123, 255, 0.4);
+            transform: translateY(-2px);
+        }
+
+        #waterBrushType { background-color: #a0d8ff; border: 1px solid #7cb9e8; }
+        #defaultBrushType { background-color: #8B4513; }
+        #waterSourceBrushType { background-color: #4CAF50; border: 1px solid #388E3C; font-size: 1.2em; color: white; line-height: 1; padding-top: 5px; }
+        .terrain-colors { display: flex; flex-wrap: wrap; justify-content: center; margin-bottom: 10px; }
+        hr { border: none; border-top: 1px solid #eee; margin: 20px 0; }
+        button {
+            padding: 12px 20px; background-color: #007bff; color: white; border: none;
+            border-radius: 8px; cursor: pointer; font-size: 1em; width: 100%;
+            margin-top: 10px; transition: background-color 0.2s ease-in-out, transform 0.1s ease-in-out;
+        }
+        button:hover { background-color: #0056b3; transform: translateY(-1px); }
+        button:active { transform: translateY(1px); }
+
+        #generateRandomTerrainBtn.sidebar-btn { background-color: #17a2b8; }
+        #generateRandomTerrainBtn.sidebar-btn:hover { background-color: #138496; }
+        #clearAllBtn { background-color: #dc3545; }
+        #clearAllBtn:hover { background-color: #c82333; }
+        .height-control-btn { background-color: #6c757d; }
+        .height-control-btn:hover { background-color: #5a6268;}
+
+        .canvas-action-button {
+            display: block; width: 280px; margin: 10px auto; padding: 12px 20px;
+            color: white; border: none; border-radius: 8px; cursor: pointer;
+            font-size: 1em; text-align: center;
+            transition: background-color 0.2s ease-in-out, transform 0.1s ease-in-out;
+        }
+        #generateRandomTerrainBtn.canvas-action-button { background-color: #17a2b8; }
+        #generateRandomTerrainBtn.canvas-action-button:hover { background-color: #138496; transform: translateY(-1px); }
+        #generateRandomTerrainBtn.canvas-action-button:active { transform: translateY(1px); }
+
+        @media (max-width: 1100px) {
+            .main-content-area { flex-wrap: wrap; }
+            #sidebar { margin-right: 0; width: 100%; max-width: 800px; margin-bottom: 20px; }
+            #three-container { width: 100%; max-width: 800px; }
+             #hamsterStatsUI { max-width: calc(100% - 40px); }
+        }
+        @media (max-width: 768px) {
+            body { flex-direction: column; align-items: center; padding: 10px; }
+            .main-content-area { flex-direction: column; align-items: center; }
+            #sidebar { width: 90%; margin-right: 0; margin-bottom: 20px; max-width: none;}
+            #three-container { width: 90%; max-width: 90%; height: 400px; margin-bottom: 20px;}
+            .brush-type-option, .brush-shape-option, .terrain-option { width: 35px; height: 35px; font-size: 1.2em; }
+            button, .canvas-action-button { padding: 10px 15px; font-size: 0.9em; width: 90%; max-width: 280px; }
+            #hamsterStatsUI { width: 90%; font-size: 0.8em; }
+        }
+    </style>
+</head>
+<body>
+    <div id="hamsterStatsUI">햄스터 정보가 여기에 표시됩니다.</div>
+    <div class="main-content-area">
+        <div id="sidebar">
+            <div class="section-title">브러쉬 종류</div>
+            <div id="brushTypeOptions">
+                <div class="brush-type-option selected" id="defaultBrushType" data-brush-type="default" title="지형 브러쉬"></div>
+                <div class="brush-type-option" id="waterBrushType" data-brush-type="water" title="물 추가 브러쉬"></div>
+                <div class="brush-type-option" id="waterSourceBrushType" data-brush-type="water-source" title="물 근원 브러쉬">💧</div>
+                <div class="brush-type-option" id="hamsterBrushType" data-brush-type="hamster" title="햄스터 소환">🐹</div>
+            </div>
+            <hr>
+            <div class="section-title">브러쉬 형태</div>
+            <div id="brushShapeOptions">
+                <div class="brush-shape-option selected" data-brush-shape="circle-small" title="작은 원">⚪</div>
+                <div class="brush-shape-option" data-brush-shape="square" title="사각형">⬛</div>
+                <div class="brush-shape-option" data-brush-shape="circle-large" title="큰 원">⚫</div>
+                <div class="brush-shape-option" data-brush-shape="cross" title="십자형">➕</div>
+            </div>
+            <hr>
+            <div class="section-title">지형 높이 (20단계)</div>
+            <div id="terrainOptions" class="terrain-colors"></div>
+            <button id="increaseTerrainHeightBtn" class="height-control-btn">지형 한 칸 높이기 (↑)</button>
+            <button id="decreaseTerrainHeightBtn" class="height-control-btn">지형 한 칸 낮추기 (↓)</button>
+            <hr>
+            <button id="clearAllBtn">모두 초기화</button>
+        </div>
+        <div id="three-container"></div>
+    </div>
+    <div class="canvas-buttons-container">
+        <button id="generateRandomTerrainBtn" class="canvas-action-button">자연스러운 지형 생성</button>
+    </div>
+
+    <script>
+        let scene, camera, renderer, controls, raycaster;
+        const pointer = new THREE.Vector2();
+        const threeContainer = document.getElementById('three-container');
+        const brushTypeOptionsDiv = document.getElementById('brushTypeOptions');
+        const brushShapeOptionsDiv = document.getElementById('brushShapeOptions');
+        const terrainOptionsDiv = document.getElementById('terrainOptions');
+        const generateRandomTerrainBtn = document.getElementById('generateRandomTerrainBtn');
+        const clearAllBtn = document.getElementById('clearAllBtn');
+        const increaseTerrainHeightBtn = document.getElementById('increaseTerrainHeightBtn');
+        const decreaseTerrainHeightBtn = document.getElementById('decreaseTerrainHeightBtn');
+        const hamsterStatsUIDiv = document.getElementById('hamsterStatsUI');
+
+        const gridSize = 10;
+        const cols = 50;
+        const rows = 50;
+        const terrainHeightScale = 2.5;
+
+        let terrainGrid = Array(rows).fill(0).map(() => Array(cols).fill(0));
+        let waterGrid = Array(rows).fill(0).map(() => Array(cols).fill(0));
+        let waterSourceGrid = Array(rows).fill(0).map(() => Array(cols).fill(false));
+
+        let terrainMeshes = Array(rows).fill(null).map(() => Array(cols).fill(null));
+        let waterMeshes = Array(rows).fill(null).map(() => Array(cols).fill(null));
+        let interactionPlane;
+
+        let simulationInterval;
+        const waterFlowRate = 0.30;
+        const waterAbsorptionRate = 0.0015;
+        const waterSourceLevel = 2;
+        const smoothingIterations = 7;
+        const waterUnitVisualHeightFactor = terrainHeightScale * 0.2;
+
+        let currentBrushType = 'default';
+        let currentBrushShape = 'circle-small';
+        let currentTerrainHeightIndex = 0;
+
+        let lastKnownMouseClientX = 0;
+        let lastKnownMouseClientY = 0;
+
+        const hamsters = [];
+        const hamsterSpeed = 0.25;
+        const hamsterSize = 2;
+        const houseSize = 4;
+        const storageSize = 3;
+        let nextHamsterId = 1;
+
+
+        class Hamster {
+            constructor(id, initialGridPos) {
+                this.id = id;
+                this.scene = scene;
+                this.gridPos = { r: initialGridPos.row, c: initialGridPos.col };
+                this.worldPos = this.gridToWorld(this.gridPos.r, this.gridPos.c);
+
+                const geometry = new THREE.SphereGeometry(hamsterSize, 16, 16);
+                const material = new THREE.MeshLambertMaterial({ color: 0xCD853F }); // Peru
+                this.mesh = new THREE.Mesh(geometry, material);
+                const initialTerrainHeightIdx = terrainGrid[this.gridPos.r]?.[this.gridPos.c] ?? 0;
+                const initialTerrainSurfaceY = ((initialTerrainHeightIdx + 1) * terrainHeightScale);
+                this.mesh.position.set(this.worldPos.x, initialTerrainSurfaceY + hamsterSize / 2, this.worldPos.z);
+                this.scene.add(this.mesh);
+
+                this.state = 'IDLE';
+                this.targetGridPos = null;
+                this.targetWorldPos = null;
+                this.actionTimer = 0;
+                this.houseMesh = null;
+                this.storageMesh = null;
+                this.hasBuiltHouse = false;
+                this.hasBuiltStorage = false;
+
+                this.thirst = 100;
+                this.hunger = 100;
+                this.boredom = 100;
+                this.maxNeed = 100;
+                this.thirstThreshold = 50;
+                this.hungerThreshold = 60;
+                this.boredomThreshold = 40;
+                this.needsDecreaseTimer = 0;
+                this.actionDuration = 90;
+                this.boredomReliefDuration = 150;
+                this.restingInHouseDuration = 300; // 집에 머무르는 시간
+            }
+
+            gridToWorld(r, c) {
+                const x = (c - cols / 2 + 0.5) * gridSize;
+                const z = (r - rows / 2 + 0.5) * gridSize;
+                const terrainHeightIdx = terrainGrid[r]?.[c] ?? 0;
+                const y = ((terrainHeightIdx + 1) * terrainHeightScale);
+                return new THREE.Vector3(x, y, z);
+            }
+
+            updateNeeds() {
+                this.needsDecreaseTimer++;
+                if (this.needsDecreaseTimer >= 90) {
+                    if (this.state !== 'DRINKING') {
+                        this.thirst = Math.max(0, this.thirst - 4);
+                    }
+                    if (this.state !== 'EATING' && this.state !== 'SEEKING_EXTRA_FOOD') {
+                        this.hunger = Math.max(0, this.hunger - 5);
+                    }
+                    if (this.state !== 'WANDERING_ACTION' && this.state !== 'RESTING_AT_WATERSIDE' && this.state !== 'SEEKING_EXTRA_FOOD' && this.state !== 'RESTING_IN_HOUSE') {
+                         this.boredom = Math.max(0, this.boredom - 3);
+                    }
+                    this.needsDecreaseTimer = 0;
+                }
+            }
+
+            update() {
+                this.updateNeeds();
+                const currentTerrainHeightIdx = terrainGrid[this.gridPos.r]?.[this.gridPos.c] ?? 0;
+                const currentTerrainSurfaceY = ((currentTerrainHeightIdx + 1) * terrainHeightScale);
+                if(this.mesh.visible) { // 보이는 경우에만 y좌표 업데이트
+                    this.mesh.position.y = currentTerrainSurfaceY + hamsterSize / 2;
+                }
+
+
+                switch (this.state) {
+                    case 'IDLE':
+                        this.mesh.visible = true; // IDLE 상태 시작 시 보이도록 설정
+                        if (this.thirst < this.thirstThreshold) this.state = 'SEEKING_WATER_SPOT';
+                        else if (this.hunger < this.hungerThreshold) this.state = 'SEEKING_FOOD_SPOT';
+                        else if (this.boredom < this.boredomThreshold) {
+                            const randomAction = Math.random();
+                            if (randomAction < 0.33) this.state = 'SEEKING_WANDER_SPOT';
+                            else if (randomAction < 0.66) this.state = 'SEEKING_EXTRA_FOOD_SPOT';
+                            else this.state = 'SEEKING_REST_SPOT_WATERSIDE';
+                        }
+                        else if (!this.hasBuiltHouse) this.state = 'SEEKING_HOUSE_SPOT';
+                        else if (!this.hasBuiltStorage) this.state = 'SEEKING_STORAGE_SPOT';
+                        else this.state = 'MOVING_TO_REST_IN_HOUSE'; // 모든 작업 완료 후 집으로
+                        break;
+
+                    case 'SEEKING_WATER_SPOT':
+                    case 'SEEKING_FOOD_SPOT':
+                    case 'SEEKING_HOUSE_SPOT':
+                    case 'SEEKING_STORAGE_SPOT':
+                    case 'SEEKING_WANDER_SPOT':
+                    case 'SEEKING_EXTRA_FOOD_SPOT':
+                    case 'SEEKING_REST_SPOT_WATERSIDE':
+                        this.targetGridPos = null;
+                        if (this.state === 'SEEKING_WATER_SPOT' || this.state === 'SEEKING_REST_SPOT_WATERSIDE') this.targetGridPos = this.findNearestWaterEdgeCell();
+                        else if (this.state === 'SEEKING_FOOD_SPOT' || this.state === 'SEEKING_EXTRA_FOOD_SPOT' || this.state === 'SEEKING_WANDER_SPOT') this.targetGridPos = this.findRandomDrySpotNearby(7);
+                        else if (this.state === 'SEEKING_HOUSE_SPOT') this.targetGridPos = this.findRandomDrySpotNearby(10);
+                        else if (this.state === 'SEEKING_STORAGE_SPOT') this.targetGridPos = this.findAdjacentDrySpot(this.houseMesh?.userData.gridPos);
+
+                        if (this.targetGridPos) {
+                            this.targetWorldPos = this.gridToWorld(this.targetGridPos.r, this.targetGridPos.c);
+                            const targetTerrainHeightIdx = terrainGrid[this.targetGridPos.r]?.[this.targetGridPos.c] ?? 0;
+                            this.targetWorldPos.y = ((targetTerrainHeightIdx + 1) * terrainHeightScale) + hamsterSize / 2;
+                            this.state = 'MOVING_TO_TARGET';
+                        } else {
+                            this.state = 'IDLE';
+                        }
+                        break;
+                    case 'MOVING_TO_REST_IN_HOUSE': // 집으로 이동하는 상태
+                        if (!this.houseMesh) { // 집이 없으면 IDLE
+                            this.state = 'IDLE';
+                            break;
+                        }
+                        this.targetGridPos = this.houseMesh.userData.gridPos;
+                        this.targetWorldPos = this.gridToWorld(this.targetGridPos.r, this.targetGridPos.c);
+                        const targetHouseTerrainHeightIdx = terrainGrid[this.targetGridPos.r]?.[this.targetGridPos.c] ?? 0;
+                        this.targetWorldPos.y = ((targetHouseTerrainHeightIdx + 1) * terrainHeightScale) + hamsterSize/2; // 집 위치의 지형 표면
+
+                        const dirToHouse = this.targetWorldPos.clone().sub(this.mesh.position).normalize();
+                        dirToHouse.y = 0;
+                        this.mesh.position.add(dirToHouse.multiplyScalar(hamsterSpeed));
+                        const distToHouseXZ = new THREE.Vector2(this.mesh.position.x - this.targetWorldPos.x, this.mesh.position.z - this.targetWorldPos.z).length();
+
+                        if (distToHouseXZ < gridSize / 2) {
+                            this.state = 'RESTING_IN_HOUSE';
+                            this.mesh.visible = false; // 집에 도착하면 숨김
+                            this.actionTimer = 0;
+                            this.gridPos = {r: this.targetGridPos.r, c: this.targetGridPos.c };
+                        }
+                        break;
+
+                    case 'MOVING_TO_TARGET':
+                        if (this.targetWorldPos) {
+                            const direction = this.targetWorldPos.clone().sub(this.mesh.position).normalize();
+                            direction.y = 0;
+                            this.mesh.position.add(direction.multiplyScalar(hamsterSpeed));
+
+                            const distanceXZ = new THREE.Vector2(this.mesh.position.x - this.targetWorldPos.x, this.mesh.position.z - this.targetWorldPos.z).length();
+                            if (distanceXZ < gridSize / 2) {
+                                this.gridPos = {r: this.targetGridPos.r, c: this.targetGridPos.c };
+                                this.actionTimer = 0;
+
+                                if (this.isWaterEdge(this.gridPos.r, this.gridPos.c) && this.thirst < this.thirstThreshold) this.state = 'DRINKING';
+                                else if (this.isWaterEdge(this.gridPos.r, this.gridPos.c) && this.boredom < this.boredomThreshold && this.state !== 'DRINKING') this.state = 'RESTING_AT_WATERSIDE';
+                                else if (waterGrid[this.gridPos.r]?.[this.gridPos.c] <= 0.01 && (this.hunger < this.hungerThreshold || (this.boredom < this.boredomThreshold && (Math.random() < 0.5)))) this.state = 'EATING';
+                                else if (!this.hasBuiltHouse && waterGrid[this.gridPos.r]?.[this.gridPos.c] <= 0.01) this.state = 'BUILDING_HOUSE';
+                                else if (this.hasBuiltHouse && !this.hasBuiltStorage && this.targetGridPos &&
+                                         this.isAdjacentToHouse(this.targetGridPos) && waterGrid[this.gridPos.r]?.[this.gridPos.c] <= 0.01) {
+                                    this.state = 'BUILDING_STORAGE';
+                                }
+                                else if (this.boredom < this.boredomThreshold) this.state = 'WANDERING_ACTION';
+                                else this.state = 'IDLE';
+                            }
+                        } else {
+                            this.state = 'IDLE';
+                        }
+                        break;
+
+                    case 'DRINKING':
+                        this.actionTimer++;
+                        if (this.actionTimer > this.actionDuration) {
+                            this.thirst = this.maxNeed;
+                            this.state = 'IDLE';
+                        }
+                        break;
+                    case 'EATING':
+                        this.actionTimer++;
+                        if (this.actionTimer > this.actionDuration) {
+                            this.hunger = this.maxNeed;
+                            if(this.boredom < this.boredomThreshold + 20) this.boredom = Math.min(this.maxNeed, this.boredom + 40);
+                            this.state = 'IDLE';
+                        }
+                        break;
+                    case 'BUILDING_HOUSE':
+                        this.actionTimer++;
+                        if (this.actionTimer > this.actionDuration * 1.5) {
+                            if (!this.houseMesh) {
+                                const houseGeo = new THREE.BoxGeometry(houseSize, houseSize, houseSize);
+                                const houseMat = new THREE.MeshLambertMaterial({ color: 0xA0522D });
+                                this.houseMesh = new THREE.Mesh(houseGeo, houseMat);
+                                const buildWorldPos = this.gridToWorld(this.gridPos.r, this.gridPos.c);
+                                const houseBaseY = ((terrainGrid[this.gridPos.r][this.gridPos.c] + 1) * terrainHeightScale);
+                                this.houseMesh.position.set(buildWorldPos.x, houseBaseY + houseSize / 2, buildWorldPos.z);
+                                this.houseMesh.userData = { type: 'house', owner: this.id, gridPos: {r: this.gridPos.r, c: this.gridPos.c } };
+                                this.scene.add(this.houseMesh);
+                                this.hasBuiltHouse = true;
+                            }
+                            this.state = 'IDLE';
+                        }
+                        break;
+                    case 'BUILDING_STORAGE':
+                         this.actionTimer++;
+                        if (this.actionTimer > this.actionDuration) {
+                            if (!this.storageMesh) {
+                                const storageGeo = new THREE.BoxGeometry(storageSize, storageSize, storageSize);
+                                const storageMat = new THREE.MeshLambertMaterial({ color: 0x808080 });
+                                this.storageMesh = new THREE.Mesh(storageGeo, storageMat);
+                                const buildWorldPos = this.gridToWorld(this.gridPos.r, this.gridPos.c);
+                                const storageBaseY = ((terrainGrid[this.gridPos.r][this.gridPos.c] + 1) * terrainHeightScale);
+                                this.storageMesh.position.set(buildWorldPos.x, storageBaseY + storageSize / 2, buildWorldPos.z);
+                                this.storageMesh.userData = { type: 'storage', owner: this.id, gridPos: {r: this.gridPos.r, c: this.gridPos.c } };
+                                this.scene.add(this.storageMesh);
+                                this.hasBuiltStorage = true;
+                            }
+                            this.state = 'MOVING_TO_REST_IN_HOUSE'; // 보관소 짓고 집으로
+                        }
+                        break;
+                    case 'WANDERING_ACTION':
+                        this.actionTimer++;
+                        if (this.actionTimer > this.boredomReliefDuration * 0.7) {
+                            this.boredom = Math.min(this.maxNeed, this.boredom + 50);
+                            this.state = 'IDLE';
+                        }
+                        break;
+                    case 'RESTING_AT_WATERSIDE':
+                        this.actionTimer++;
+                         if (this.actionTimer > this.boredomReliefDuration) {
+                            this.boredom = Math.min(this.maxNeed, this.boredom + 70);
+                            this.state = 'IDLE';
+                        }
+                        break;
+                    case 'RESTING_IN_HOUSE':
+                        this.mesh.visible = false; // 집에 있는 동안은 안보이게
+                        this.actionTimer++;
+                        if (this.actionTimer > this.restingInHouseDuration) { // 집에 머무르는 시간
+                            this.state = 'IDLE'; // 휴식 끝나면 다시 IDLE 상태로 (욕구 체크 시작)
+                            this.mesh.visible = true; // 집에서 나올 때 다시 보이게
+                            this.actionTimer = 0;
+                             // 집에서 나올 때 위치를 집 바로 앞으로 약간 이동 (선택적)
+                            const housePos = this.houseMesh.userData.gridPos;
+                            const exitSpot = this.findAdjacentDrySpot(housePos) || housePos; // 집 옆이나 집 위치
+                            this.gridPos = {r: exitSpot.r, c: exitSpot.c};
+                            const exitWorldPos = this.gridToWorld(exitSpot.r, exitSpot.c);
+                            this.mesh.position.set(exitWorldPos.x, ((terrainGrid[exitSpot.r]?.[exitSpot.c]??0 + 1) * terrainHeightScale) + hamsterSize/2 , exitWorldPos.z);
+                        }
+                        break;
+                    case 'ALL_TASKS_DONE_IDLING': // 사용 안함 -> MOVING_TO_REST_IN_HOUSE 로 대체
+                        this.state = 'MOVING_TO_REST_IN_HOUSE';
+                        break;
+                }
+
+                const currentC = Math.floor((this.mesh.position.x + (cols / 2) * gridSize) / gridSize);
+                const currentR = Math.floor((this.mesh.position.z + (rows / 2) * gridSize) / gridSize);
+                if (currentR >=0 && currentR < rows && currentC >=0 && currentC < cols) {
+                    if (waterGrid[currentR]?.[currentC] > 0.1 && this.state !== 'DRINKING' && this.state !== 'RESTING_AT_WATERSIDE' && this.state !== 'MOVING_TO_TARGET') {
+                        this.state = 'IDLE'; // 물에 빠지면 IDLE
+                        this.mesh.position.set(this.worldPos.x, currentTerrainSurfaceY + hamsterSize / 2, this.worldPos.z);
+                    } else if (this.state !== 'MOVING_TO_TARGET' && this.state !== 'MOVING_TO_REST_IN_HOUSE' ) { // 이동 중이 아닐 때만 그리드 위치 업데이트
+                        this.gridPos = {r: currentR, c: currentC};
+                        this.worldPos = this.gridToWorld(currentR, currentC);
+                    }
+                }
+            }
+
+            findNearestWaterEdgeCell() {
+                let minDistSq = Infinity;
+                let nearestEdgeCell = null;
+                const searchRadius = 10;
+                const startR = Math.max(0, this.gridPos.r - searchRadius);
+                const endR = Math.min(rows - 1, this.gridPos.r + searchRadius);
+                const startC = Math.max(0, this.gridPos.c - searchRadius);
+                const endC = Math.min(cols - 1, this.gridPos.c + searchRadius);
+
+                for (let r = startR; r <= endR; r++) {
+                    for (let c = startC; c <= endC; c++) {
+                        if (this.isWaterEdge(r, c)) {
+                            const distSq = (r - this.gridPos.r) ** 2 + (c - this.gridPos.c) ** 2;
+                            if (distSq < minDistSq) {
+                                minDistSq = distSq;
+                                nearestEdgeCell = { r, c };
+                            }
+                        }
+                    }
+                }
+                return nearestEdgeCell;
+            }
+
+            isWaterEdge(r,c) {
+                if (r < 0 || r >= rows || c < 0 || c >= cols) return false;
+                if ((waterGrid[r]?.[c] ?? 0) > 0.1) return false;
+                const neighbors = [{dr:-1,dc:0},{dr:1,dc:0},{dr:0,dc:-1},{dr:0,dc:1}];
+                for (const n of neighbors) {
+                    const nr = r + n.dr;
+                    const nc = c + n.dc;
+                    if (nr >=0 && nr < rows && nc >=0 && nc < cols && (waterGrid[nr]?.[nc] ?? 0) > 0.1) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            findRandomDrySpotNearby(radius) {
+                for (let i=0; i<30; i++) {
+                    const rOffset = Math.floor(Math.random() * (2 * radius + 1)) - radius;
+                    const cOffset = Math.floor(Math.random() * (2 * radius + 1)) - radius;
+                    const nr = this.gridPos.r + rOffset;
+                    const nc = this.gridPos.c + cOffset;
+                    if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && (waterGrid[nr]?.[nc] ?? 1) <= 0.01 &&
+                        (!this.houseMesh || (this.houseMesh.userData.gridPos.r !== nr || this.houseMesh.userData.gridPos.c !== nc)) &&
+                        (!this.storageMesh || (this.storageMesh.userData.gridPos.r !== nr || this.storageMesh.userData.gridPos.c !== nc))
+                    ) {
+                        return {r: nr, c: nc};
+                    }
+                }
+                return {r: this.gridPos.r, c: this.gridPos.c};
+            }
+             findAdjacentDrySpot(centerPos) {
+                if (!centerPos) return this.findRandomDrySpotNearby(3);
+                const directions = [{dr:-1,dc:0},{dr:1,dc:0},{dr:0,dc:-1},{dr:0,dc:1}];
+                const shuffledDirections = directions.sort(() => 0.5 - Math.random());
+                for (const dir of shuffledDirections) {
+                    const nr = centerPos.r + dir.dr;
+                    const nc = centerPos.c + dir.dc;
+                    if (nr >= 0 && nr < rows && nc >= 0 && nc < cols &&
+                        (waterGrid[nr]?.[nc] ?? 1) <= 0.01 &&
+                        (!this.houseMesh || (this.houseMesh.userData.gridPos.r !== nr || this.houseMesh.userData.gridPos.c !== nc)) &&
+                        (!this.storageMesh || (this.storageMesh.userData.gridPos.r !== nr || this.storageMesh.userData.gridPos.c !== nc))
+                        ) {
+                        return {r: nr, c: nc};
+                    }
+                }
+                return this.findRandomDrySpotNearby(3);
+            }
+            isAdjacentToHouse(pos) {
+                if (!this.houseMesh || !pos) return false;
+                const houseR = this.houseMesh.userData.gridPos.r;
+                const houseC = this.houseMesh.userData.gridPos.c;
+                const dr = Math.abs(pos.r - houseR);
+                const dc = Math.abs(pos.c - houseC);
+                return (dr <= 1 && dc <= 1) && !(dr === 0 && dc === 0);
+            }
+        }
+
+
+        function generateTerrainColorsArray() {
+            const colors = [];
+            const baseHueGreen = 120;
+            for (let i = 0; i < 20; i++) {
+                let hue = baseHueGreen - i * 0.2;
+                let saturation = 60 + i * 2;
+                let lightness = 80 - i * 3.5;
+                saturation = Math.min(100, Math.max(30, saturation));
+                lightness = Math.min(85, Math.max(10, lightness));
+                hue = (hue % 360 + 360) % 360;
+                colors.push(`hsl(${hue}, ${saturation}%, ${lightness}%)`);
+            }
+            return colors;
+        }
+        const terrainColors = generateTerrainColorsArray();
+
+        function renderTerrainOptionsUI() {
+            terrainOptionsDiv.innerHTML = '';
+            terrainColors.forEach((color, index) => {
+                const div = document.createElement('div');
+                div.classList.add('terrain-option');
+                div.style.backgroundColor = color;
+                div.dataset.heightIndex = index;
+                div.title = `지형 높이 ${index + 1}`;
+                if (index === currentTerrainHeightIndex) {
+                    div.classList.add('selected');
+                }
+                terrainOptionsDiv.appendChild(div);
+            });
+        }
+
+        function updateSelectedTerrainOptionUI() {
+            document.querySelectorAll('.terrain-option').forEach(opt => {
+                opt.classList.remove('selected');
+                if (parseInt(opt.dataset.heightIndex) === currentTerrainHeightIndex) {
+                    opt.classList.add('selected');
+                }
+            });
+        }
+
+        function initThreeJS() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB);
+            camera = new THREE.PerspectiveCamera(60, threeContainer.clientWidth / threeContainer.clientHeight, 0.1, 3000);
+            camera.position.set(cols * gridSize * 0.3, rows * gridSize * 1.2, rows * gridSize * 1.2);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(threeContainer.clientWidth, threeContainer.clientHeight);
+            renderer.shadowMap.enabled = true;
+            threeContainer.appendChild(renderer.domElement);
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(150, 200, 100);
+            directionalLight.castShadow = true;
+            scene.add(directionalLight);
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.target.set(0, 0, 0);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.screenSpacePanning = false;
+            controls.maxPolarAngle = Math.PI / 2 - 0.05;
+            controls.minDistance = 30;
+            controls.maxDistance = 1500;
+            raycaster = new THREE.Raycaster();
+            const planeGeometry = new THREE.PlaneGeometry(cols * gridSize, rows * gridSize);
+            const planeMaterial = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide });
+            interactionPlane = new THREE.Mesh(planeGeometry, planeMaterial);
+            interactionPlane.rotation.x = -Math.PI / 2;
+            scene.add(interactionPlane);
+            animate();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            hamsters.forEach(hamster => hamster.update());
+            if (hamsters.length > 0) {
+                const firstHamster = hamsters[0];
+                hamsterStatsUIDiv.innerHTML = `햄스터 ${firstHamster.id}: 배고픔 ${firstHamster.hunger.toFixed(0)}/${firstHamster.maxNeed}, 목마름 ${firstHamster.thirst.toFixed(0)}/${firstHamster.maxNeed}, 심심함 ${firstHamster.boredom.toFixed(0)}/${firstHamster.maxNeed} | 상태: ${firstHamster.state}`;
+            } else {
+                hamsterStatsUIDiv.innerHTML = "햄스터를 소환해주세요 ('🐹' 브러쉬 선택 후 'g'키)";
+            }
+            renderer.render(scene, camera);
+        }
+
+        function createInitial3DTerrainAndWaterMeshes() {
+            scene.children.filter(obj => obj.isMesh && obj !== interactionPlane).forEach(mesh => {
+                scene.remove(mesh);
+                if (mesh.geometry) mesh.geometry.dispose();
+                if (mesh.material) mesh.material.dispose();
+            });
+            terrainMeshes = Array(rows).fill(null).map(() => Array(cols).fill(null));
+            waterMeshes = Array(rows).fill(null).map(() => Array(cols).fill(null));
+            const terrainBaseGeometry = new THREE.BoxGeometry(gridSize, 1, gridSize);
+            const waterBaseGeometry = new THREE.PlaneGeometry(gridSize, gridSize);
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const terrainMaterial = new THREE.MeshLambertMaterial({ color: terrainColors[0] });
+                    const terrainMesh = new THREE.Mesh(terrainBaseGeometry, terrainMaterial);
+                    const x = (c - cols / 2 + 0.5) * gridSize;
+                    const z = (r - rows / 2 + 0.5) * gridSize;
+                    terrainMesh.position.set(x, 0, z);
+                    terrainMesh.castShadow = true;
+                    terrainMesh.receiveShadow = true;
+                    scene.add(terrainMesh);
+                    terrainMeshes[r][c] = terrainMesh;
+                    const waterMaterial = new THREE.MeshStandardMaterial({
+                        color: 0x004080,
+                        transparent: true, opacity: 0,
+                        roughness: 0.1, metalness: 0.2, side: THREE.DoubleSide
+                    });
+                    const waterMesh = new THREE.Mesh(waterBaseGeometry, waterMaterial);
+                    waterMesh.rotation.x = -Math.PI / 2;
+                    waterMesh.position.set(x, 0.1, z);
+                    scene.add(waterMesh);
+                    waterMeshes[r][c] = waterMesh;
+                }
+            }
+            update3DMeshesFromGridData();
+        }
+
+        function update3DMeshesFromGridData() {
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const terrainHeightIdx = terrainGrid[r][c];
+                    const waterLevel = waterGrid[r][c];
+                    const terrainMesh = terrainMeshes[r][c];
+                    const waterMesh = waterMeshes[r][c];
+                    if (!terrainMesh || !waterMesh) continue;
+                    const scaledTerrainActualHeight = (terrainHeightIdx + 1) * terrainHeightScale;
+                    terrainMesh.scale.y = scaledTerrainActualHeight;
+                    terrainMesh.position.y = scaledTerrainActualHeight / 2;
+                    terrainMesh.material.color.set(terrainColors[terrainHeightIdx]);
+                    const terrainTopSurfaceY = terrainMesh.position.y + scaledTerrainActualHeight / 2;
+                    if (waterLevel > 0.01) {
+                        const visualWaterDepth = waterLevel * waterUnitVisualHeightFactor;
+                        waterMesh.position.y = terrainTopSurfaceY + visualWaterDepth + 0.05;
+                        waterMesh.material.opacity = Math.min(0.85, (waterLevel / 3.5) + 0.25);
+                    } else {
+                        waterMesh.material.opacity = 0;
+                        waterMesh.position.y = terrainTopSurfaceY + 0.05;
+                    }
+                    if (waterSourceGrid[r][c]) {
+                        waterMesh.material.color.set(0x32CD32);
+                    } else {
+                        waterMesh.material.color.set(0x004080);
+                    }
+                }
+            }
+        }
+
+        brushTypeOptionsDiv.addEventListener('click', (e) => {
+            const target = e.target.closest('.brush-type-option');
+            if (target) {
+                document.querySelectorAll('.brush-type-option').forEach(opt => opt.classList.remove('selected'));
+                target.classList.add('selected');
+                currentBrushType = target.dataset.brushType;
+            }
+        });
+        brushShapeOptionsDiv.addEventListener('click', (e) => {
+            const target = e.target.closest('.brush-shape-option');
+            if (target) {
+                document.querySelectorAll('.brush-shape-option').forEach(opt => opt.classList.remove('selected'));
+                target.classList.add('selected');
+                currentBrushShape = target.dataset.brushShape;
+            }
+        });
+        terrainOptionsDiv.addEventListener('click', (e) => {
+            const target = e.target.closest('.terrain-option');
+            if (target) {
+                currentTerrainHeightIndex = parseInt(target.dataset.heightIndex);
+                updateSelectedTerrainOptionUI();
+                document.querySelectorAll('.brush-type-option').forEach(opt => opt.classList.remove('selected'));
+                document.getElementById('defaultBrushType').classList.add('selected');
+                currentBrushType = 'default';
+            }
+        });
+
+        increaseTerrainHeightBtn.addEventListener('click', () => {
+            currentTerrainHeightIndex = Math.min(19, currentTerrainHeightIndex + 1);
+            updateSelectedTerrainOptionUI();
+            document.querySelectorAll('.brush-type-option').forEach(opt => opt.classList.remove('selected'));
+            document.getElementById('defaultBrushType').classList.add('selected');
+            currentBrushType = 'default';
+        });
+
+        decreaseTerrainHeightBtn.addEventListener('click', () => {
+            currentTerrainHeightIndex = Math.max(0, currentTerrainHeightIndex - 1);
+            updateSelectedTerrainOptionUI();
+            document.querySelectorAll('.brush-type-option').forEach(opt => opt.classList.remove('selected'));
+            document.getElementById('defaultBrushType').classList.add('selected');
+            currentBrushType = 'default';
+        });
+
+        clearAllBtn.addEventListener('click', () => {
+            resetAllGridsAndMeshes();
+            hamsters.forEach(hamster => {
+                scene.remove(hamster.mesh);
+                if (hamster.houseMesh) scene.remove(hamster.houseMesh);
+                if (hamster.storageMesh) scene.remove(hamster.storageMesh);
+            });
+            hamsters.length = 0;
+             nextHamsterId = 1;
+        });
+
+        generateRandomTerrainBtn.addEventListener('click', () => {
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    terrainGrid[r][c] = Math.floor(Math.random() * 15);
+                }
+            }
+            for (let i = 0; i < smoothingIterations; i++) {
+                applyTerrainSmoothing();
+            }
+            waterGrid = Array(rows).fill(0).map(() => Array(cols).fill(0));
+            waterSourceGrid = Array(rows).fill(0).map(() => Array(cols).fill(false));
+            update3DMeshesFromGridData();
+            hamsters.forEach(hamster => {
+                scene.remove(hamster.mesh);
+                if (hamster.houseMesh) scene.remove(hamster.houseMesh);
+                if (hamster.storageMesh) scene.remove(hamster.storageMesh);
+            });
+            hamsters.length = 0;
+            nextHamsterId = 1;
+        });
+
+        function applyTerrainSmoothing() {
+            let newSmoothedTerrainGrid = JSON.parse(JSON.stringify(terrainGrid));
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    let sumOfHeights = 0;
+                    let neighborCount = 0;
+                    for (let dr = -1; dr <= 1; dr++) {
+                        for (let dc = -1; dc <= 1; dc++) {
+                            const nr = r + dr;
+                            const nc = c + dc;
+                            if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) {
+                                sumOfHeights += terrainGrid[nr][nc];
+                                neighborCount++;
+                            }
+                        }
+                    }
+                    if (neighborCount > 0) {
+                        newSmoothedTerrainGrid[r][c] = Math.round(sumOfHeights / neighborCount);
+                    }
+                }
+            }
+            terrainGrid = newSmoothedTerrainGrid;
+        }
+
+        function getGridCoordinatesFromStoredMouse() {
+            if (!renderer || !camera || !interactionPlane) return null;
+            const rect = renderer.domElement.getBoundingClientRect();
+            pointer.x = ((lastKnownMouseClientX - rect.left) / rect.width) * 2 - 1;
+            pointer.y = -((lastKnownMouseClientY - rect.top) / rect.height) * 2 + 1;
+            raycaster.setFromCamera(pointer, camera);
+            const intersects = raycaster.intersectObject(interactionPlane);
+            if (intersects.length > 0) {
+                const intersectPoint = intersects[0].point;
+                const col = Math.floor((intersectPoint.x + (cols / 2) * gridSize) / gridSize);
+                const row = Math.floor((intersectPoint.z + (rows / 2) * gridSize) / gridSize);
+                if (row >= 0 && row < rows && col >= 0 && col < cols) {
+                    return { row, col };
+                }
+            }
+            return null;
+        }
+
+        threeContainer.addEventListener('mousemove', (event) => {
+            lastKnownMouseClientX = event.clientX;
+            lastKnownMouseClientY = event.clientY;
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'g' || event.key === 'G') {
+                if (controls) controls.enabled = false;
+                const gridCoords = getGridCoordinatesFromStoredMouse();
+                if (gridCoords) {
+                    if (currentBrushType === 'hamster') {
+                        const newHamster = new Hamster(nextHamsterId++, gridCoords);
+                        hamsters.push(newHamster);
+                    } else {
+                        applyBrushToGridCell(gridCoords.row, gridCoords.col);
+                        update3DMeshesFromGridData();
+                    }
+                }
+            }
+        });
+
+        document.addEventListener('keyup', (event) => {
+            if (event.key === 'g' || event.key === 'G') {
+                if (controls) controls.enabled = true;
+            }
+        });
+
+        function applyBrushToGridCell(centerRow, centerCol) {
+            let affectedCells = [];
+            switch (currentBrushShape) {
+                case 'circle-small':
+                    affectedCells.push({ r: centerRow, c: centerCol });
+                    break;
+                case 'square':
+                    for (let rOffset = -1; rOffset <= 1; rOffset++) {
+                        for (let cOffset = -1; cOffset <= 1; cOffset++) {
+                            affectedCells.push({ r: centerRow + rOffset, c: centerCol + cOffset });
+                        }
+                    }
+                    break;
+                case 'circle-large':
+                    for (let rOffset = -2; rOffset <= 2; rOffset++) {
+                        for (let cOffset = -2; cOffset <= 2; cOffset++) {
+                            if (rOffset * rOffset + cOffset * cOffset <= 5) {
+                                affectedCells.push({ r: centerRow + rOffset, c: centerCol + cOffset });
+                            }
+                        }
+                    }
+                    break;
+                case 'cross':
+                    affectedCells.push({ r: centerRow, c: centerCol });
+                    affectedCells.push({ r: centerRow - 1, c: centerCol });
+                    affectedCells.push({ r: centerRow + 1, c: centerCol });
+                    affectedCells.push({ r: centerRow, c: centerCol - 1 });
+                    affectedCells.push({ r: centerRow, c: centerCol + 1 });
+                    break;
+            }
+            affectedCells.forEach(cell => {
+                const {r, c} = cell;
+                if (r >= 0 && r < rows && c >= 0 && c < cols) {
+                    if (currentBrushType === 'default') {
+                        terrainGrid[r][c] = currentTerrainHeightIndex;
+                    } else if (currentBrushType === 'water') {
+                        waterGrid[r][c] = Math.min(20, waterGrid[r][c] + 1);
+                    } else if (currentBrushType === 'water-source') {
+                        waterSourceGrid[r][c] = !waterSourceGrid[r][c];
+                    }
+                }
+            });
+        }
+
+        function resetAllGridsAndMeshes() {
+            terrainGrid = Array(rows).fill(0).map(() => Array(cols).fill(0));
+            waterGrid = Array(rows).fill(0).map(() => Array(cols).fill(0));
+            waterSourceGrid = Array(rows).fill(0).map(() => Array(cols).fill(false));
+            currentTerrainHeightIndex = 0;
+            renderTerrainOptionsUI();
+            update3DMeshesFromGridData();
+        }
+
+        function simulateWaterFlow() {
+            let nextWaterGrid = JSON.parse(JSON.stringify(waterGrid));
+            for(let r = 0; r < rows; r++) {
+                for(let c = 0; c < cols; c++) {
+                    if (waterSourceGrid[r][c]) {
+                        nextWaterGrid[r][c] = Math.max(nextWaterGrid[r][c], waterSourceLevel);
+                    }
+                    if (nextWaterGrid[r][c] > 0) {
+                        nextWaterGrid[r][c] -= waterAbsorptionRate;
+                        if (nextWaterGrid[r][c] < 0) nextWaterGrid[r][c] = 0;
+                    }
+                    const currentWaterAmountInCell = waterGrid[r][c];
+                    if (currentWaterAmountInCell <= 0.01) continue;
+                    const currentTerrainActualTopY = (terrainGrid[r][c] + 1) * terrainHeightScale;
+                    const currentEffectiveWaterSurfaceY = currentTerrainActualTopY + currentWaterAmountInCell * waterUnitVisualHeightFactor;
+                    let neighborsForFlow = [];
+                    let totalHeightDifferenceForDistribution = 0;
+                    const potentialNeighbors = [ { dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 } ];
+                    potentialNeighbors.forEach(offset => {
+                        const nr = r + offset.dr;
+                        const nc = c + offset.dc;
+                        if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) {
+                            const neighborTerrainActualTopY = (terrainGrid[nr][nc] + 1) * terrainHeightScale;
+                            const neighborEffectiveWaterSurfaceY = neighborTerrainActualTopY + waterGrid[nr][nc] * waterUnitVisualHeightFactor;
+                            const heightDiff = currentEffectiveWaterSurfaceY - neighborEffectiveWaterSurfaceY;
+                            if (heightDiff > 0) {
+                                neighborsForFlow.push({ r: nr, c: nc, diff: heightDiff });
+                                totalHeightDifferenceForDistribution += heightDiff;
+                            }
+                        }
+                    });
+                    if (neighborsForFlow.length > 0 && totalHeightDifferenceForDistribution > 0) {
+                        let waterToDistributeFromCell = currentWaterAmountInCell * waterFlowRate;
+                        waterToDistributeFromCell = Math.min(waterToDistributeFromCell, currentWaterAmountInCell * 0.8);
+                        for (const neighbor of neighborsForFlow) {
+                            const flowAmountToNeighbor = waterToDistributeFromCell * (neighbor.diff / totalHeightDifferenceForDistribution);
+                            if (flowAmountToNeighbor > 0) {
+                                nextWaterGrid[r][c] -= flowAmountToNeighbor;
+                                nextWaterGrid[neighbor.r][neighbor.c] += flowAmountToNeighbor;
+                            }
+                        }
+                    }
+                }
+            }
+            waterGrid = nextWaterGrid.map(rowArray => rowArray.map(val => Math.max(0, Math.min(val, 25))));
+            update3DMeshesFromGridData();
+        }
+
+        window.onload = function () {
+            renderTerrainOptionsUI();
+            initThreeJS();
+            createInitial3DTerrainAndWaterMeshes();
+            resetAllGridsAndMeshes();
+            simulationInterval = setInterval(simulateWaterFlow, 150);
+        }
+
+        window.addEventListener('resize', () => {
+            if (camera && renderer) {
+                camera.aspect = threeContainer.clientWidth / threeContainer.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(threeContainer.clientWidth, threeContainer.clientHeight);
+            }
+        });
+    </script>
+</body>
+</html>
